@@ -1,0 +1,108 @@
+from decimal import Decimal
+
+from django.contrib.auth.models import AbstractUser
+from django.db import models
+
+
+class User(AbstractUser):
+    USER_TYPE_CHOICES = [
+        ('customer', 'Customer'),
+        ('vendor', 'Slot Vendor'),
+        ('security', 'Security'),
+        ('admin', 'Admin'),
+    ]
+    user_type = models.CharField(max_length=20, choices=USER_TYPE_CHOICES, default='customer')
+    phone = models.CharField(max_length=15, blank=True)
+
+    def __str__(self):
+        return f"{self.username} ({self.user_type})"
+
+
+class ParkingSpace(models.Model):
+    name = models.CharField(max_length=100)
+    vendor = models.ForeignKey(User, on_delete=models.CASCADE, limit_choices_to={'user_type': 'vendor'})
+    address = models.TextField()
+    total_slots = models.PositiveIntegerField()
+    location = models.TextField(blank=True)
+    open_time = models.TimeField(null=True, blank=True)
+    close_time = models.TimeField(null=True, blank=True)
+    google_map_link = models.URLField(blank=True)
+    parking_image = models.ImageField(upload_to='parking_space_images/', null=True, blank=True)
+    cctv_video = models.FileField(upload_to='parking_space_cctv/', null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+
+class ParkingSlot(models.Model):
+    space = models.ForeignKey(ParkingSpace, on_delete=models.CASCADE)
+    slot_id = models.CharField(max_length=10, unique=True)
+    label = models.CharField(max_length=50)
+    is_occupied = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.label} ({self.slot_id})"
+
+
+class Reservation(models.Model):
+    STATUS_PENDING_BOOKING_PAYMENT = 'pending_booking_payment'
+    STATUS_RESERVED = 'reserved'
+    STATUS_CHECKED_IN = 'checked_in'
+    STATUS_CHECKED_OUT = 'checked_out'
+    STATUS_COMPLETED = 'completed'
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING_BOOKING_PAYMENT, 'Pending Booking Payment'),
+        (STATUS_RESERVED, 'Reserved'),
+        (STATUS_CHECKED_IN, 'Checked In'),
+        (STATUS_CHECKED_OUT, 'Checked Out'),
+        (STATUS_COMPLETED, 'Completed'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    slot = models.ForeignKey(ParkingSlot, on_delete=models.CASCADE)
+    reservation_id = models.CharField(max_length=20, unique=True)
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField()
+    amount = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0.00'))
+    is_paid = models.BooleanField(default=False)
+    booking_fee = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('1.00'))
+    booking_fee_paid = models.BooleanField(default=False)
+    checkin_time = models.DateTimeField(null=True, blank=True)
+    checkout_time = models.DateTimeField(null=True, blank=True)
+    final_fee = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    final_fee_paid = models.BooleanField(default=False)
+    hourly_rate = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('2.40'))
+    status = models.CharField(max_length=40, choices=STATUS_CHOICES, default=STATUS_PENDING_BOOKING_PAYMENT)
+    qr_code = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Reservation {self.reservation_id}"
+
+
+class Gate(models.Model):
+    name = models.CharField(max_length=100)
+    space = models.ForeignKey(ParkingSpace, on_delete=models.CASCADE)
+    is_active = models.BooleanField(default=True)
+    last_access = models.DateTimeField(null=True, blank=True)
+    access_count = models.PositiveIntegerField(default=0)
+
+    def __str__(self):
+        return self.name
+
+
+class CCTVFeed(models.Model):
+    space = models.ForeignKey(ParkingSpace, on_delete=models.CASCADE)
+    camera_id = models.CharField(max_length=20)
+    name = models.CharField(max_length=100)
+    stream_url = models.URLField()
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.name} - {self.space.name}"
+
